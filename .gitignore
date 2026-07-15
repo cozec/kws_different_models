@@ -1,0 +1,25 @@
+# datasets, venvs, caches (also covered by per-dir .gitignore files)
+**/.venv/
+**/__pycache__/
+Spoken-Keyword-Spotting/input/
+KWS_pytorch/data/
+KWS_pytorch/checkpoint/
+KWS_pytorch/loss/
+Wav2Keyword/data/
+Wav2Keyword/checkpoint/
+
+# heavy binaries / upstream media not needed for the experiments
+Spoken-Keyword-Spotting/models/
+Spoken-Keyword-Spotting/docs/
+Wav2Keyword/dist/
+Wav2Keyword/fairseq.egg-info/
+
+# run logs and pid files
+*.log
+*_pid.txt
+eval_pid.txt
+
+# editor
+.vscode/
+Wav2Keyword/build/
+Wav2Keyword/fairseq/*.so
