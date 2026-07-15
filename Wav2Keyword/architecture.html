@@ -1,0 +1,333 @@
+<title>Wav2Keyword Architecture</title>
+<style>
+  :root {
+    --ground: #e9edf0;
+    --card: #ffffff;
+    --ink: #0e1620;
+    --ink-2: #3d4956;
+    --ink-3: #66717e;
+    --hair: #c9d0d6;
+    --enc: #1a56c4;          /* cold: barely moving, lr 1e-5 */
+    --enc-ink: #1247a6;
+    --enc-bg: #dce8fb;
+    --enc-frame: #1a56c4;
+    --head: #d97a00;         /* hot: learning fast, lr 5e-4 */
+    --head-ink: #a85e00;
+    --head-bg: #fdeacc;
+    --head-frame: #d97a00;
+    --chip-bg: #dfe4e8;
+    --pill-bg: #1c2836;
+    --pill-ink: #eef2f6;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: "Avenir Next", Avenir, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #0a0f16;
+      --card: #1a232e;
+      --ink: #f2f5f8;
+      --ink-2: #b7c1cc;
+      --ink-3: #7d8794;
+      --hair: #313c49;
+      --enc: #6ea8ff;
+      --enc-ink: #8cbaff;
+      --enc-bg: #16253d;
+      --enc-frame: #3c73d8;
+      --head: #f0a63a;
+      --head-ink: #f5b95f;
+      --head-bg: #2e2312;
+      --head-frame: #c07f1c;
+      --chip-bg: #263140;
+      --pill-bg: #e8edf2;
+      --pill-ink: #14202e;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0a0f16; --card: #1a232e; --ink: #f2f5f8; --ink-2: #b7c1cc;
+    --ink-3: #7d8794; --hair: #313c49; --enc: #6ea8ff; --enc-ink: #8cbaff;
+    --enc-bg: #16253d; --enc-frame: #3c73d8; --head: #f0a63a; --head-ink: #f5b95f;
+    --head-bg: #2e2312; --head-frame: #c07f1c; --chip-bg: #263140;
+    --pill-bg: #e8edf2; --pill-ink: #14202e;
+  }
+  :root[data-theme="light"] {
+    --ground: #e9edf0; --card: #ffffff; --ink: #0e1620; --ink-2: #3d4956;
+    --ink-3: #66717e; --hair: #c9d0d6; --enc: #1a56c4; --enc-ink: #1247a6;
+    --enc-bg: #dce8fb; --enc-frame: #1a56c4; --head: #d97a00; --head-ink: #a85e00;
+    --head-bg: #fdeacc; --head-frame: #d97a00; --chip-bg: #dfe4e8;
+    --pill-bg: #1c2836; --pill-ink: #eef2f6;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--sans); font-size: 15px; line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 720px; margin: 0 auto; padding: 44px 22px 72px; }
+
+  /* ---------- header ---------- */
+  .eyebrow {
+    font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ink-3); font-weight: 600; margin: 0 0 10px;
+  }
+  h1 {
+    font-size: 29px; font-weight: 650; letter-spacing: -0.015em;
+    margin: 0 0 6px; text-wrap: balance;
+  }
+  .sub { color: var(--ink-2); margin: 0 0 18px; max-width: 58ch; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .meta span {
+    font-family: var(--mono); font-size: 12px; padding: 4px 10px;
+    background: var(--chip-bg); border-radius: 4px; color: var(--ink-2);
+    font-variant-numeric: tabular-nums;
+  }
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; padding: 12px 0 6px; }
+  .legend div { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); }
+  .swatch { width: 22px; height: 12px; border-radius: 3px; flex: none; }
+  .swatch.enc  { background: var(--enc-bg); border: 2px solid var(--enc); }
+  .swatch.head { background: var(--head-bg); border: 2px solid var(--head); }
+  .legend code { font-family: var(--mono); font-size: 12px; color: var(--ink); }
+
+  /* ---------- pipeline ---------- */
+  .pipe { margin-top: 26px; }
+
+  .node {
+    background: var(--card); border: 1px solid var(--hair); border-radius: 8px;
+    padding: 14px 18px; display: grid; grid-template-columns: 1fr auto;
+    gap: 2px 16px; align-items: baseline;
+    box-shadow: 0 1px 3px rgba(10, 20, 35, 0.10);
+  }
+  .node .t  { font-size: 15.5px; font-weight: 600; letter-spacing: -0.005em; }
+  .node .d  { grid-column: 1; font-size: 13px; color: var(--ink-2); }
+  .node .p  {
+    grid-column: 2; grid-row: 1 / span 2; align-self: center;
+    font-family: var(--mono); font-size: 12.5px; color: var(--ink-3);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+
+  /* connector: line + shape chip + line + arrowhead */
+  .link { display: grid; justify-items: center; }
+  .link i { display: block; width: 2.5px; height: 13px; background: var(--ink-3); }
+  .link .shape {
+    font-family: var(--mono); font-size: 12px; color: var(--pill-ink);
+    background: var(--pill-bg); padding: 3.5px 11px; border-radius: 999px;
+    margin: 3px 0; font-variant-numeric: tabular-nums; font-weight: 500;
+    max-width: 100%; text-align: center;
+  }
+  .link .arr {
+    width: 0; height: 0; border-left: 6px solid transparent;
+    border-right: 6px solid transparent; border-top: 7px solid var(--ink-2);
+    margin-top: -1px;
+  }
+
+  /* group frames */
+  .group { border: 2px solid var(--enc-frame); background: var(--enc-bg); border-radius: 12px; padding: 14px; }
+  .group.head { border-color: var(--head-frame); background: var(--head-bg); }
+  .ghead {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px;
+    padding: 2px 6px 12px;
+  }
+  .ghead .gt { font-size: 12.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--enc-ink); }
+  .group.head .gt { color: var(--head-ink); }
+  .ghead .gs { font-size: 12.5px; color: var(--ink-2); }
+  .ghead .gp { margin-left: auto; font-family: var(--mono); font-size: 12.5px; color: var(--enc-ink); font-variant-numeric: tabular-nums; }
+  .group.head .gp { color: var(--head-ink); }
+  .group .node { border-color: color-mix(in srgb, var(--enc-frame) 55%, var(--hair)); }
+  .group.head .node { border-color: color-mix(in srgb, var(--head-frame) 55%, var(--hair)); }
+
+  /* the receptive-field callout */
+  .callout {
+    grid-column: 1 / -1; margin-top: 8px; padding: 9px 12px;
+    border-left: 4px solid var(--head); border-radius: 0 6px 6px 0;
+    background: color-mix(in srgb, var(--head) 14%, var(--card));
+    font-size: 12.5px; color: var(--ink-2);
+  }
+  .callout b { color: var(--ink); font-weight: 600; }
+  .callout code { font-family: var(--mono); font-size: 11.5px; }
+
+  /* waveform canvas in the input node */
+  .wavebox { grid-column: 1 / -1; margin-top: 8px; height: 34px; }
+  .wavebox canvas { width: 100%; height: 34px; display: block; }
+
+  /* output classes */
+  .classes { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+  .cls {
+    font-family: var(--mono); font-size: 11.5px; padding: 2.5px 8px;
+    border-radius: 4px; background: var(--chip-bg); color: var(--ink);
+  }
+  .cls.rej { background: transparent; border: 1px dashed var(--ink-3); color: var(--ink-3); }
+
+  /* decision split */
+  .decide { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .decide .node .t { font-size: 14px; }
+  @media (max-width: 560px) { .decide { grid-template-columns: 1fr; } }
+
+  .foot { margin-top: 30px; font-size: 12.5px; color: var(--ink-3); max-width: 62ch; }
+  .foot code { font-family: var(--mono); font-size: 11.5px; }
+</style>
+
+<div class="page">
+  <p class="eyebrow">Wav2Keyword · Wav2KWS — Seo, Oh &amp; Jung, IEEE Access 2021</p>
+  <h1>Model architecture</h1>
+  <p class="sub">A 94.4M-parameter pretrained speech encoder, gently fine-tuned, feeding a
+     2.2M-parameter keyword head trained from scratch. Color encodes how fast the weights move.</p>
+
+  <div class="meta">
+    <span>96.5 M params total</span>
+    <span>in: 1 s @ 16 kHz</span>
+    <span>out: 22 classes</span>
+    <span>97.23 % test · 3 epochs</span>
+  </div>
+
+  <div class="legend">
+    <div><span class="swatch enc"></span> pretrained, fine-tuned&nbsp;<code>lr 1e-5</code></div>
+    <div><span class="swatch head"></span> from scratch&nbsp;<code>lr 5e-4</code>&nbsp;(50× faster)</div>
+  </div>
+
+  <div class="pipe">
+
+    <div class="node">
+      <div class="t">Raw waveform</div>
+      <div class="d">1 second of audio, no spectrogram front-end</div>
+      <div class="p">(B, 16000)</div>
+      <div class="wavebox"><canvas id="wave"></canvas></div>
+    </div>
+
+    <div class="link"><i></i><span class="shape">(B, 16000)</span><i></i><span class="arr"></span></div>
+
+    <div class="group">
+      <div class="ghead">
+        <span class="gt">Wav2Vec 2.0 base encoder</span>
+        <span class="gs">pretrained on LibriSpeech 960 h</span>
+        <span class="gp">94.4 M</span>
+      </div>
+
+      <div class="node">
+        <div class="t">CNN feature extractor</div>
+        <div class="d">7 temporal convolutions · ≈320× downsampling → one frame per 20 ms</div>
+        <div class="p">4.2 M</div>
+      </div>
+
+      <div class="link"><i></i><span class="shape">(B, 49, 512)</span><i></i><span class="arr"></span></div>
+
+      <div class="node">
+        <div class="t">Projection 512 → 768</div>
+        <div class="d">+ positional convolution embedding</div>
+      </div>
+
+      <div class="link"><i></i><span class="shape">(B, 49, 768)</span><i></i><span class="arr"></span></div>
+
+      <div class="node">
+        <div class="t">Transformer × 12</div>
+        <div class="d">hidden 768 · 8 heads · FFN 3072 — contextualizes all 49 frames bidirectionally</div>
+        <div class="p">90.2 M</div>
+      </div>
+    </div>
+
+    <div class="link"><i></i><span class="shape">(B, 49, 768) → transpose → (B, 768, 49)</span><i></i><span class="arr"></span></div>
+
+    <div class="group head">
+      <div class="ghead">
+        <span class="gt">KWS decoder head</span>
+        <span class="gs">the only part that starts from random weights</span>
+        <span class="gp">2.2 M</span>
+      </div>
+
+      <div class="node">
+        <div class="t">Conv1d 768 → 112 · kernel 25 · dilation 2</div>
+        <div class="d">+ BatchNorm + ReLU</div>
+        <div class="callout">
+          <b>This layer collapses time.</b> Receptive field
+          <code>2 × (25 − 1) + 1 = 49</code> — exactly the transformer's output
+          length. The full second is aggregated into a single vector in one
+          learned step, replacing naive mean-pooling: <code>T: 49 → 1</code>.
+        </div>
+      </div>
+
+      <div class="link"><i></i><span class="shape">(B, 112, 1)</span><i></i><span class="arr"></span></div>
+
+      <div class="node">
+        <div class="t">Conv1d 112 → 112 · kernel 1</div>
+        <div class="d">+ BatchNorm + ReLU — with T = 1 these 1×1 convs act as an MLP classifier</div>
+      </div>
+
+      <div class="link"><i></i><span class="shape">(B, 112, 1)</span><i></i><span class="arr"></span></div>
+
+      <div class="node">
+        <div class="t">Conv1d 112 → 22 · kernel 1</div>
+        <div class="d">squeeze → raw logits (softmax removed from training: double-softmax bugfix)</div>
+      </div>
+    </div>
+
+    <div class="link"><i></i><span class="shape">(B, 22) logits</span><i></i><span class="arr"></span></div>
+
+    <div class="node">
+      <div class="t">Output — 22 classes</div>
+      <div class="d">2 rejection classes absorb non-keyword audio; 20 command words can fire</div>
+      <div class="classes">
+        <span class="cls rej">unknown</span><span class="cls rej">silence</span>
+        <span class="cls">yes</span><span class="cls">no</span><span class="cls">up</span>
+        <span class="cls">down</span><span class="cls">left</span><span class="cls">right</span>
+        <span class="cls">on</span><span class="cls">off</span><span class="cls">stop</span>
+        <span class="cls">go</span><span class="cls">zero</span><span class="cls">one</span>
+        <span class="cls">two</span><span class="cls">three</span><span class="cls">four</span>
+        <span class="cls">five</span><span class="cls">six</span><span class="cls">seven</span>
+        <span class="cls">eight</span><span class="cls">nine</span>
+      </div>
+    </div>
+
+    <div class="link"><i></i><i></i><span class="arr"></span></div>
+
+    <div class="decide">
+      <div class="node">
+        <div class="t">Clip classification</div>
+        <div class="d">argmax over 22 logits → predicted keyword</div>
+      </div>
+      <div class="node">
+        <div class="t">Streaming detection</div>
+        <div class="d">softmax → posteriors, smoothed over 5 windows; fire when best keyword ≥ τ = 0.85</div>
+      </div>
+    </div>
+
+  </div>
+
+  <p class="foot">
+    Measured on Apple Silicon (MPS): <code>8.7 ms</code> per 1 s window —
+    real-time factor 0.009, re-scored every 100 ms in the streaming demo.
+    Encoder weights: <code>torchaudio WAV2VEC2_BASE</code>
+    (= fairseq <code>wav2vec_small.pt</code>).
+  </p>
+</div>
+
+<script>
+(function () {
+  const cv = document.getElementById('wave');
+  function draw() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = cv.clientWidth, h = cv.clientHeight;
+    cv.width = w * dpr; cv.height = h * dpr;
+    const ctx = cv.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, w, h);
+    const stroke = getComputedStyle(document.body).getPropertyValue('color');
+    ctx.strokeStyle = stroke; ctx.globalAlpha = 0.7; ctx.lineWidth = 1.2;
+    // deterministic pseudo-waveform: a word-like burst between quieter tails
+    let seed = 7;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    ctx.beginPath();
+    const mid = h / 2, n = Math.floor(w / 2);
+    for (let i = 0; i <= n; i++) {
+      const x = i * 2, t = i / n;
+      const env = Math.exp(-Math.pow((t - 0.5) / 0.18, 2)) * 0.9 + 0.06;
+      const y = mid + (rnd() - 0.5) * 2 * env * (mid - 2) *
+                Math.sin(i * 0.9 + rnd() * 2);
+      ctx.moveTo(x, mid + (mid - y) ); ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  draw();
+  new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  if (window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEventListener('change', draw);
+  addEventListener('resize', draw);
+})();
+</script>
