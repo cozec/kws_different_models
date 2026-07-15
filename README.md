@@ -25,11 +25,15 @@ whose first layer (kernel 25, dilation 2) has receptive field exactly 49 = the
 transformer's output length, collapsing 1 s of audio to a single vector.
 Asymmetric fine-tuning: encoder lr 1e-5, head lr 5e-4.
 
-**📐 Architecture diagram:** [`Wav2Keyword/architecture.html`](Wav2Keyword/architecture.html)
-— color encodes learning rate (blue = pretrained encoder @ 1e-5, amber = head
-from scratch @ 5e-4), tensor shapes on every connector, light/dark themes.
-GitHub doesn't render HTML in the file view; open it locally or
-[view it rendered](https://htmlpreview.github.io/?https://github.com/cozec/kws_different_models/blob/main/Wav2Keyword/architecture.html).
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Wav2Keyword/architecture-dark.png">
+  <img alt="Wav2Keyword architecture: Wav2Vec 2.0 base encoder (94.4M params, fine-tuned @ lr 1e-5) feeding a 2.2M-param KWS conv decoder head (from scratch @ lr 5e-4), collapsing 1 s of audio to 22 class logits" src="Wav2Keyword/architecture-light.png" width="740">
+</picture>
+
+*Color encodes learning rate: blue = pretrained encoder (lr 1e-5), amber = head
+from scratch (lr 5e-4). Interactive version:
+[`architecture.html`](Wav2Keyword/architecture.html)
+([rendered](https://htmlpreview.github.io/?https://github.com/cozec/kws_different_models/blob/main/Wav2Keyword/architecture.html)).*
 
 **Results** (Speech Commands v0.01, 22 classes: 20 words + unknown + silence;
 43,173 train / 5,880 test; MPS, ~70 min):
